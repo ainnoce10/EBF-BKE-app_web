@@ -156,7 +156,7 @@ export default function SignalerPage() {
     }, 100);
   };
 
-  const handleGeolocation = () => {
+  const handleGeolocation = async () => {
     if (!navigator.geolocation) {
       setLocationError("La géolocalisation n'est pas supportée par votre navigateur");
       return;
@@ -166,38 +166,63 @@ export default function SignalerPage() {
     setLocationError(null);
     setLocationSuccess(null);
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        const coordinates = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-        const googleMapsLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
-        
-        setPosition(coordinates);
-        setMapsLink(googleMapsLink);
-        setLocationSuccess("✅ Position ajoutée avec succès !");
+    try {
+      // D'abord, vérifier si les permissions sont déjà accordées
+      const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+      
+      if (permissionStatus.state === 'denied') {
+        setLocationError("🔒 Vous avez précédemment refusé l'accès à votre position. Veuillez autoriser la géolocalisation dans les paramètres de votre navigateur et réessayer.");
         setLocationLoading(false);
-        
-        // Le message de succès reste maintenant affiché jusqu'à l'actualisation de la page
-        // Plus de setTimeout pour effacer le message
-      },
-      (error) => {
-        setLocationLoading(false);
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            setLocationError("Vous avez refusé l'accès à votre position");
-            break;
-          case error.POSITION_UNAVAILABLE:
-            setLocationError("Votre position n'a pas pu être déterminée");
-            break;
-          case error.TIMEOUT:
-            setLocationError("La demande de position a expiré");
-            break;
-          default:
-            setLocationError("Une erreur inconnue est survenue");
-            break;
-        }
+        return;
       }
-    );
+
+      // Utiliser une approche avec timeout et options plus précises
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error('La demande de position a expiré'));
+        }, 15000); // 15 secondes de timeout
+
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            clearTimeout(timeoutId);
+            resolve(pos);
+          },
+          (error) => {
+            clearTimeout(timeoutId);
+            reject(error);
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 0 // Force une nouvelle position plutôt que d'utiliser le cache
+          }
+        );
+      });
+
+      const { latitude, longitude } = position.coords;
+      const coordinates = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+      const googleMapsLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
+      
+      setPosition(coordinates);
+      setMapsLink(googleMapsLink);
+      setLocationSuccess("✅ Position ajoutée avec succès !");
+      setLocationLoading(false);
+      
+    } catch (error: any) {
+      setLocationLoading(false);
+      
+      if (error.message === 'La demande de position a expiré') {
+        setLocationError("⏱️ La demande de position a expiré. Veuillez réessayer dans un endroit avec meilleure réception GPS.");
+      } else if (error.code === error.PERMISSION_DENIED) {
+        setLocationError("🔒 Accès à la position refusé. Pour activer la géolocalisation :\n\n1. Cliquez sur l'icône de cadenas 🔒 dans la barre d'adresse\n2. Autorisez l'accès à la position\n3. Rechargez la page et réessayez");
+      } else if (error.code === error.POSITION_UNAVAILABLE) {
+        setLocationError("📡 Position indisponible. Vérifiez que votre GPS est activé et que vous avez une bonne connexion réseau.");
+      } else if (error.code === error.TIMEOUT) {
+        setLocationError("⏱️ Délai d'attente dépassé. Veuillez réessayer dans un endroit avec meilleure réception.");
+      } else {
+        setLocationError("❌ Une erreur est survenue lors de la récupération de votre position. Veuillez réessayer.");
+      }
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -629,17 +654,42 @@ export default function SignalerPage() {
                       <MapPin className="w-6 h-6 mr-2" />
                       {locationLoading ? '🔄 Recherche de votre position...' : position !== "" ? '✅ Position ajoutée' : '📍 Ajouter ma position'}
                     </Button>
+                    
+                    {/* Instructions */}
+                    <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <p className="text-sm text-blue-800 font-medium mb-1">💡 Pour ajouter votre position :</p>
+                      <ul className="text-xs text-blue-700 space-y-1">
+                        <li>• Cliquez sur le bouton ci-dessus</li>
+                        <li>• Autorisez l'accès à votre position lorsque demandé</li>
+                        <li>• Si vous avez déjà refusé, cliquez sur 🔒 dans la barre d'adresse pour modifier les permissions</li>
+                      </ul>
+                    </div>
+                    
                     {locationSuccess && (
                       <p className="text-sm text-green-600 mt-2 p-3 bg-green-50 rounded-lg">{locationSuccess}</p>
                     )}
                     {locationError && (
-                      <p className="text-sm text-red-600 mt-2 p-3 bg-red-50 rounded-lg">{locationError}</p>
+                      <p className="text-sm text-red-600 mt-2 p-3 bg-red-50 rounded-lg whitespace-pre-line">{locationError}</p>
                     )}
                     
                     {/* Google Maps Link */}
                     {mapsLink && (
                       <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                        <p className="text-sm font-medium text-blue-800 mb-2">🗺️ Votre position sur Google Maps:</p>
+                        <div className="flex justify-between items-start mb-2">
+                          <p className="text-sm font-medium text-blue-800">🗺️ Votre position sur Google Maps:</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPosition("");
+                              setMapsLink("");
+                              setLocationSuccess(null);
+                              setLocationError(null);
+                            }}
+                            className="text-xs text-red-600 hover:text-red-800 underline"
+                          >
+                            Modifier la position
+                          </button>
+                        </div>
                         <a 
                           href={mapsLink} 
                           target="_blank" 
