@@ -6,16 +6,61 @@ export class EmailService {
   private transporter: nodemailer.Transporter;
 
   constructor() {
-    this.transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER || '',
-        pass: process.env.EMAIL_PASS || ''
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
+    // Utiliser SendGrid si configuré
+    if (process.env.EMAIL_SERVICE === 'sendgrid' && process.env.SENDGRID_API_KEY) {
+      this.transporter = nodemailer.createTransport({
+        host: 'smtp.sendgrid.net',
+        port: 587,
+        secure: false,
+        auth: {
+          user: 'apikey',
+          pass: process.env.SENDGRID_API_KEY || ''
+        }
+      });
+    } 
+    // Utiliser Brevo si configuré
+    else if (process.env.EMAIL_SERVICE === 'brevo' && process.env.BREVO_API_KEY) {
+      this.transporter = nodemailer.createTransport({
+        host: 'smtp-relay.brevo.com',
+        port: 587,
+        secure: false,
+        auth: {
+          user: process.env.BREVO_LOGIN || '',
+          pass: process.env.BREVO_API_KEY || ''
+        }
+      });
+    }
+    // Utiliser SMTP personnalisé si configuré (Mailtrap, etc.)
+    else if (process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      this.transporter = nodemailer.createTransport({
+        host: process.env.EMAIL_HOST,
+        port: parseInt(process.env.EMAIL_PORT || '587'),
+        secure: process.env.EMAIL_PORT === '465',
+        auth: {
+          user: process.env.EMAIL_USER || '',
+          pass: process.env.EMAIL_PASS || ''
+        },
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
+    }
+    // Configuration Gmail par défaut
+    else {
+      this.transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER || '',
+          pass: process.env.EMAIL_PASS || ''
+        },
+        tls: {
+          rejectUnauthorized: false
+        },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000
+      });
+    }
   }
 
   static getInstance(): EmailService {
@@ -64,11 +109,17 @@ export class EmailService {
 
       if (data.latitude && data.longitude) {
         const mapsLink = `https://www.google.com/maps?q=${data.latitude},${data.longitude}`;
+        const directionsLink = `https://www.google.com/maps/dir/?api=1&destination=${data.latitude},${data.longitude}`;
         htmlContent += `
           <tr>
             <td style="padding: 12px; border: 1px solid #d1d5db; font-weight: bold; color: #374151;">🗺️ Position GPS:</td>
             <td style="padding: 12px; border: 1px solid #d1d5db; color: #1f2937;">
-              <a href="${mapsLink}" style="color: #2563eb; text-decoration: none; font-weight: 500;">📍 Voir sur Google Maps</a>
+              <div style="margin-bottom: 8px;">
+                <a href="${mapsLink}" style="color: #2563eb; text-decoration: none; font-weight: 500; display: inline-block; margin-bottom: 4px;">📍 Voir sur Google Maps</a>
+              </div>
+              <div>
+                <a href="${directionsLink}" style="color: #059669; text-decoration: none; font-weight: 500; display: inline-block; background-color: #ecfdf5; padding: 4px 8px; border-radius: 4px; border: 1px solid #a7f3d0;">🧭 Obtenir l'itinéraire</a>
+              </div>
             </td>
           </tr>
         `;
@@ -151,8 +202,16 @@ export class EmailService {
       }
 
       const mailOptions = {
-        from: process.env.EMAIL_USER || '',
-        to: process.env.TARGET_EMAIL || 'ebfbouake@gmail.com',
+        from: process.env.EMAIL_SERVICE === 'sendgrid' 
+          ? (process.env.FROM_EMAIL || 'ebfbouake@gmail.com')
+          : process.env.EMAIL_SERVICE === 'brevo'
+          ? (process.env.BREVO_LOGIN || 'ebfbouake@gmail.com')
+          : process.env.EMAIL_HOST
+          ? (process.env.EMAIL_USER || 'ebfbouake@gmail.com')
+          : (process.env.EMAIL_USER || ''),
+        to: process.env.EMAIL_SERVICE === 'sendgrid' || process.env.EMAIL_SERVICE === 'brevo' || process.env.EMAIL_HOST
+          ? (process.env.TO_EMAIL || 'ebfbouake@gmail.com')
+          : (process.env.TARGET_EMAIL || 'ebfbouake@gmail.com'),
         subject: subject,
         html: htmlContent,
         attachments: attachments
@@ -174,6 +233,14 @@ export class EmailService {
 
   // Vérifier si le service est configuré
   isConfigured(): boolean {
-    return !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+    if (process.env.EMAIL_SERVICE === 'sendgrid') {
+      return !!(process.env.SENDGRID_API_KEY && process.env.FROM_EMAIL && process.env.TO_EMAIL);
+    } else if (process.env.EMAIL_SERVICE === 'brevo') {
+      return !!(process.env.BREVO_API_KEY && process.env.BREVO_LOGIN && process.env.TO_EMAIL);
+    } else if (process.env.EMAIL_HOST) {
+      return !!(process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS && process.env.TO_EMAIL);
+    } else {
+      return !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+    }
   }
 }
