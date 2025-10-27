@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Mic, Square, Play, Upload, Loader2, MapPin, Shield } from "lucide-react";
+import { ArrowLeft, Mic, Square, Play, Upload, Loader2, MapPin, Shield, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -26,6 +26,7 @@ export default function SignalerPage() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [locationSuccess, setLocationSuccess] = useState<string | null>(null);
+  const [showLocationToast, setShowLocationToast] = useState(false);
   const [position, setPosition] = useState("");
   const [mapsLink, setMapsLink] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -206,7 +207,13 @@ export default function SignalerPage() {
       setPosition(coordinates);
       setMapsLink(googleMapsLink);
       setLocationSuccess("✅ Position ajoutée avec succès !");
+      setShowLocationToast(true);
       setLocationLoading(false);
+      
+      // Cacher le toast après 3 secondes
+      setTimeout(() => {
+        setShowLocationToast(false);
+      }, 3000);
       
     } catch (error: any) {
       setLocationLoading(false);
@@ -333,13 +340,25 @@ export default function SignalerPage() {
       <header className="relative z-10 w-full p-4 bg-white/80 backdrop-blur-md shadow-lg border-b border-gray-100">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-3">
               <Link href="/" className="flex items-center text-blue-600 hover:text-blue-800 transition-all duration-300 hover:scale-105 transform">
                 <ArrowLeft className="w-5 h-5 mr-2" />
                 Retour
               </Link>
               <div className="h-6 w-px bg-gray-300"></div>
               <h1 className="text-2xl font-bold text-blue-900">Décrivez votre problème ⚡</h1>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Link href="/messages" className="hidden md:flex items-center space-x-1 bg-blue-100 text-blue-700 hover:bg-blue-200 hover:text-blue-800 px-3 py-1 rounded-full text-sm font-medium transition-all duration-300 hover:scale-105 transform">
+                <MessageCircle className="w-4 h-4" />
+                <span>Messages</span>
+              </Link>
+              <Link href="/dashboard" className="hidden md:flex items-center space-x-1 bg-green-100 text-green-700 hover:bg-green-200 hover:text-green-800 px-3 py-1 rounded-full text-sm font-medium transition-all duration-300 hover:scale-105 transform">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                </svg>
+                <span>Dashboard</span>
+              </Link>
             </div>
           </div>
         </div>
@@ -780,6 +799,18 @@ export default function SignalerPage() {
           </form>
         </div>
       </section>
+
+      {/* Toast de confirmation de position */}
+      {showLocationToast && (
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 animate-in slide-in-from-bottom-2 duration-300">
+          <div className="bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center space-x-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+            <span className="font-medium">Position ajoutée avec succès !</span>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
